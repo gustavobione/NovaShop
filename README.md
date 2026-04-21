@@ -54,7 +54,7 @@ os notebooks são a fonte das visualizações.
 - Resposta (síntese): `Entregue` é a maior parcela (~66%), `Cancelado` cerca de 17%,
   `Em Trânsito` ~9% e `Devolvido` ~7%.
 
-![Q1 — Pedidos por Status](./img/Pedidos por Status.png)
+![Q1 — Pedidos por Status](./img/pedidos_por_status.png)
 
 ### Q2 — Top 10 produtos (por quantidade e receita)
 
@@ -62,7 +62,7 @@ os notebooks são a fonte das visualizações.
 - Resposta (síntese): lista de top10 produtos por volume e receita (ex.: `Acessórios 43`
   aparece entre os mais vendidos).
 
-![Q2 — Top10 Produtos](./img/Top10 Produtos.png)
+![Q2 — Top10 Produtos](./img/top10_produtos.png)
 
 ### Q3 — Ticket médio por segmento (B2C vs B2B)
 
@@ -70,7 +70,7 @@ os notebooks são a fonte das visualizações.
 - Resposta (síntese): `B2B` tem ticket médio substancialmente maior que `B2C`; a diferença
   foi considerada estatisticamente significativa pelos testes aplicados.
 
-![Q3 — Ticket Médio por Segmento](./img/Ticket Medio.png)
+![Q3 — Ticket Médio por Segmento](./img/ticket_medio.png)
 
 ### Q4 — Evolução mensal e pico em Nov/2023
 
@@ -78,7 +78,7 @@ os notebooks são a fonte das visualizações.
 - Resposta (síntese): pico pronunciado em `2023-11` foi detectado na série. A causa do pico
   não é óbvia apenas pela série; foram formuladas hipóteses para investigação posterior.
 
-![Q4 — Volumes 2023-2024](./img/Volumes de Pedidos 2023-2024.png)
+![Q4 — Volumes 2023-2024](./img/volumes_de_pedidos_2023-2024.png)
 
 ### Q5 — Canal com maior taxa de cancelamento
 
@@ -86,7 +86,9 @@ os notebooks são a fonte das visualizações.
 - Resposta (síntese): `trafego_pago` apresenta a maior taxa de cancelamento (ordem de ~30%) e
   ticket médio elevado — sinal de risco ligado à qualidade do tráfego.
 
-![Q5 — Rentabilidade vs Cancelamento por Canal](./img/Rentabilidade vs Cancelamento.png)
+![Q5 — Maior Taxa de Cancelamento e Maior Ticket Médio](./img/valores_cancelamento.png)
+![Q5 — Rentabilidade vs Cancelamento por Canal](./img/rentabilidade_vs_cancelamento.png)
+
 
 ### Q6 — Inconsistências e tratamento (ETL)
 
@@ -94,7 +96,7 @@ os notebooks são a fonte das visualizações.
   procedimentos de limpeza aplicados antes das análises.
 - Resposta (síntese): principais tratamentos documentados e base preparada para análise.
 
-![Q6 — Tratamento de Dados](./img/Tratamento de Dados.png)
+![Q6 — Tratamento de Dados](./img/tratamento_de_dados.png)
 
 ---
 
