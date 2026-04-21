@@ -4,9 +4,9 @@ Objetivo: este script contém apenas testes de hipótese e rotinas reproduzívei
 para investigar o pico de Novembro/2023 (Q4) e a alta taxa de cancelamento (Q5).
 
 Uso:
-  python scripts/analise.py --all
-  python scripts/analise.py --q4-tests
-  python scripts/analise.py --q5-tests
+    python scripts/analise.py --all
+    python scripts/analise.py --q4-tests
+    python scripts/analise.py --q5-tests
 
 Notas:
 - Exploração interativa e visualizações ficam nos notebooks (`questões/`).
@@ -46,28 +46,32 @@ class DataLoader:
 
     def load(self, keys=None) -> Dict[str, pd.DataFrame]:
         keys = keys or list(self.FILES.keys())
+        data = self._read_files(keys)
+        self._parse_dates(data)
+        return data
+
+    def _read_files(self, keys) -> Dict[str, pd.DataFrame]:
         data: Dict[str, pd.DataFrame] = {}
         for k in keys:
-            path = self.data_dir / self.FILES[k]
-            if not path.exists():
+            fname = self.FILES.get(k)
+            path = self.data_dir / fname if fname else None
+            if not path or not path.exists():
                 LOG.warning('Arquivo ausente: %s (esperado em %s)', k, path)
                 data[k] = pd.DataFrame()
             else:
                 data[k] = pd.read_csv(path, low_memory=False)
-
-        # Parse datas quando presentes
-        if 'pedidos' in data and 'data_pedido' in data['pedidos'].columns:
-            data['pedidos']['data_pedido'] = pd.to_datetime(data['pedidos']['data_pedido'], errors='coerce')
-        if 'tickets' in data:
-            for c in ('data_abertura', 'data_resolucao'):
-                if c in data['tickets'].columns:
-                    data['tickets'][c] = pd.to_datetime(data['tickets'][c], errors='coerce')
-        if 'avaliacoes' in data and 'data_avaliacao' in data['avaliacoes'].columns:
-            data['avaliacoes']['data_avaliacao'] = pd.to_datetime(data['avaliacoes']['data_avaliacao'], errors='coerce')
-        if 'clientes' in data and 'data_cadastro' in data['clientes'].columns:
-            data['clientes']['data_cadastro'] = pd.to_datetime(data['clientes']['data_cadastro'], errors='coerce')
-
         return data
+
+    def _parse_dates(self, data: Dict[str, pd.DataFrame]) -> None:
+        def try_parse(key: str, col: str):
+            if key in data and col in data[key].columns:
+                data[key][col] = pd.to_datetime(data[key][col], errors='coerce')
+
+        try_parse('pedidos', 'data_pedido')
+        try_parse('avaliacoes', 'data_avaliacao')
+        try_parse('clientes', 'data_cadastro')
+        for c in ('data_abertura', 'data_resolucao'):
+            try_parse('tickets', c)
 
 
 class HypothesisTester:
@@ -165,7 +169,64 @@ class HypothesisTester:
         self._to_json(out, 'q4_hypotheses.json')
         return {'q4_hypotheses': out}
 
-    def q5_tests(self, pedidos: pd.DataFrame, clientes: pd.DataFrame, tickets: pd.DataFrame | None = None) -> Dict[str, Any]:
+    def _compute_channel_summary(self, merged: pd.DataFrame) -> pd.DataFrame:
+        ca = merged.groupby('canal_aquisicao').agg(
+            total_orders=('id', 'count'),
+            cancelled=('is_cancelled', 'sum'),
+            avg_value=('valor_total', 'mean')
+        ).reset_index()
+        ca['cancel_rate'] = (ca['cancelled'] / ca['total_orders'] * 100).round(2)
+        return ca.sort_values('cancel_rate', ascending=False).reset_index(drop=True)
+
+    def _compare_trafego_pago(self, ca: pd.DataFrame) -> Dict[str, Any]:
+        comps: Dict[str, Any] = {}
+        try:
+            tp = ca[ca['canal_aquisicao'] == 'trafego_pago']
+            if tp.empty:
+                return comps
+            x1 = int(tp['cancelled'].iloc[0])
+            n1 = int(tp['total_orders'].iloc[0])
+            for _, row in ca.iterrows():
+                ch = row['canal_aquisicao']
+                if ch == 'trafego_pago':
+                    continue
+                x2 = int(row['cancelled'])
+                n2 = int(row['total_orders'])
+                comps[f'trafego_pago_vs_{ch}'] = self._two_prop_ztest(x1, n1, x2, n2)
+        except Exception:
+            LOG.exception('Erro em comparações por canal')
+        return comps
+
+    def _cupom_effect_overall(self, merged: pd.DataFrame) -> Any:
+        try:
+            with_cup = merged[merged['cupom_desconto'].notnull() & (merged['cupom_desconto'].astype(str).str.strip() != '')]
+            without_cup = merged[~(merged['cupom_desconto'].notnull() & (merged['cupom_desconto'].astype(str).str.strip() != ''))]
+            x1 = int(with_cup['is_cancelled'].sum())
+            n1 = int(len(with_cup))
+            x2 = int(without_cup['is_cancelled'].sum())
+            n2 = int(len(without_cup))
+            return {'with': {'x': x1, 'n': n1}, 'without': {'x': x2, 'n': n2}, 'test': self._two_prop_ztest(x1, n1, x2, n2)}
+        except Exception:
+            LOG.exception('Erro ao calcular efeito de cupom (overall)')
+            return None
+
+    def _cupom_effect_nov2023(self, df: pd.DataFrame) -> Any:
+        try:
+            df2 = df.copy()
+            df2['ano_mes'] = df2['data_pedido'].dt.strftime('%Y-%m')
+            nov = df2[df2['ano_mes'] == '2023-11']
+            with_cup = nov[nov['cupom_desconto'].notnull() & (nov['cupom_desconto'].astype(str).str.strip() != '')]
+            without_cup = nov[~(nov['cupom_desconto'].notnull() & (nov['cupom_desconto'].astype(str).str.strip() != ''))]
+            x1 = int(with_cup['status'].str.lower().eq('cancelado').sum())
+            n1 = int(len(with_cup))
+            x2 = int(without_cup['status'].str.lower().eq('cancelado').sum())
+            n2 = int(len(without_cup))
+            return {'with': {'x': x1, 'n': n1}, 'without': {'x': x2, 'n': n2}, 'test': self._two_prop_ztest(x1, n1, x2, n2)}
+        except Exception:
+            LOG.exception('Erro ao calcular efeito de cupom (Nov/2023)')
+            return None
+
+    def q5_tests(self, pedidos: pd.DataFrame, clientes: pd.DataFrame) -> Dict[str, Any]:
         """Testes adicionais para investigar a alta taxa de cancelamento (Q5).
 
         Saídas:
@@ -184,56 +245,13 @@ class HypothesisTester:
         out: Dict[str, Any] = {}
 
         if 'canal_aquisicao' in merged.columns:
-            ca = merged.groupby('canal_aquisicao').agg(total_orders=('id', 'count'), cancelled=('is_cancelled', 'sum'), avg_value=('valor_total', 'mean')).reset_index()
-            ca['cancel_rate'] = (ca['cancelled'] / ca['total_orders'] * 100).round(2)
-            ca = ca.sort_values('cancel_rate', ascending=False).reset_index(drop=True)
+            ca = self._compute_channel_summary(merged)
             self._to_csv(ca, 'q5_channel_cancel_rates_full.csv')
             out['channel_summary'] = ca.to_dict('records')
+            out['trafego_pago_comparisons'] = self._compare_trafego_pago(ca)
 
-            # compare trafego_pago vs others
-            try:
-                tp = ca[ca['canal_aquisicao'] == 'trafego_pago']
-                if not tp.empty:
-                    x1 = int(tp['cancelled'].iloc[0])
-                    n1 = int(tp['total_orders'].iloc[0])
-                    comps = {}
-                    for _, row in ca.iterrows():
-                        ch = row['canal_aquisicao']
-                        if ch == 'trafego_pago':
-                            continue
-                        x2 = int(row['cancelled'])
-                        n2 = int(row['total_orders'])
-                        comps[f'trafego_pago_vs_{ch}'] = self._two_prop_ztest(x1, n1, x2, n2)
-                    out['trafego_pago_comparisons'] = comps
-            except Exception:
-                LOG.exception('Erro em comparações por canal')
-
-        # cupom effect overall
-        try:
-            with_cup = merged[merged['cupom_desconto'].notnull() & (merged['cupom_desconto'].astype(str).str.strip() != '')]
-            without_cup = merged[~(merged['cupom_desconto'].notnull() & (merged['cupom_desconto'].astype(str).str.strip() != ''))]
-            x1 = int(with_cup['is_cancelled'].sum())
-            n1 = int(len(with_cup))
-            x2 = int(without_cup['is_cancelled'].sum())
-            n2 = int(len(without_cup))
-            out['cupom_effect_overall'] = {'with': {'x': x1, 'n': n1}, 'without': {'x': x2, 'n': n2}, 'test': self._two_prop_ztest(x1, n1, x2, n2)}
-        except Exception:
-            out['cupom_effect_overall'] = None
-
-        # cupom effect in Nov/2023
-        try:
-            df2 = df.copy()
-            df2['ano_mes'] = df2['data_pedido'].dt.strftime('%Y-%m')
-            nov = df2[df2['ano_mes'] == '2023-11']
-            with_cup = nov[nov['cupom_desconto'].notnull() & (nov['cupom_desconto'].astype(str).str.strip() != '')]
-            without_cup = nov[~(nov['cupom_desconto'].notnull() & (nov['cupom_desconto'].astype(str).str.strip() != ''))]
-            x1 = int(with_cup['status'].str.lower().eq('cancelado').sum())
-            n1 = int(len(with_cup))
-            x2 = int(without_cup['status'].str.lower().eq('cancelado').sum())
-            n2 = int(len(without_cup))
-            out['cupom_effect_nov2023'] = {'with': {'x': x1, 'n': n1}, 'without': {'x': x2, 'n': n2}, 'test': self._two_prop_ztest(x1, n1, x2, n2)}
-        except Exception:
-            out['cupom_effect_nov2023'] = None
+        out['cupom_effect_overall'] = self._cupom_effect_overall(merged)
+        out['cupom_effect_nov2023'] = self._cupom_effect_nov2023(df)
 
         self._to_json(out, 'q5_channel_tests.json')
         return {'q5_tests': out}
@@ -262,7 +280,7 @@ def main():
 
     if run_all or args.q5_tests:
         LOG.info('Executando testes Q5 (cancelamentos)')
-        summary.update(tester.q5_tests(data.get('pedidos', pd.DataFrame()), data.get('clientes', pd.DataFrame()), data.get('tickets')))
+        summary.update(tester.q5_tests(data.get('pedidos', pd.DataFrame()), data.get('clientes', pd.DataFrame())))
 
     # grava resumo compacto
     try:
