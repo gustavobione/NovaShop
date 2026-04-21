@@ -1,92 +1,100 @@
-**📊 Desafio Técnico: Análise de Dados - NovaShop (Peers Group)**
+**Documento principal de apresentação**
 
-Este repositório contém a resolução do case técnico de análise de dados da NovaShop. O objetivo deste projeto é auditar a base de dados do e-commerce, realizar o tratamento de inconsistências e extrair insights estratégicos sobre vendas, clientes e produtos.
+Este README é a documentação principal do projeto: segue uma visão organizada (introdução/contextualização), metodologia de investigação, respostas às perguntas do case, análises, hipóteses testadas e conclusões.
 
-**⚙️ Como Executar o Projeto**
+**1) Introdução / Contextualização**
 
-1. Clone o repositório e acesse a pasta raiz:
+- NovaShop: e‑commerce com operações B2C e B2B; desafio: entender padrões de pedidos, sazonalidade e, principalmente, a alta taxa de cancelamento e devoluções.
+- Objetivo do projeto: responder as perguntas do case (Q1–Q6), identificar padrões e investigar a causa do pico em Nov/2023 e por que `trafego_pago` tem taxa de cancelamento elevada.
 
-```bash
-git clone https://github.com/gustavobione/NovaShop.git
-cd "NovaShop"
-```
+**2) Estrutura do repositório (pontos importantes)**
+- Código de análise reprodutível: [scripts/analise.py](scripts/analise.py) — gera CSV/JSON em `outputs/` e contém funções de auditoria e testes de hipótese (Q4 e Q5).
+- Notebooks explicativos: [questões/](questões/) — exploração passo-a-passo e visualizações (úteis para apresentação e QA).
+- Prints / evidências visuais: `img/` (já incluídos) — gráficos e tabelas que usei para a narrativa.
 
-2. Crie e ative um ambiente virtual:
+Nota importante: os notebooks são a fonte narrativa e de visualização; `scripts/analise.py` foi deliberadamente reduzido para um runner de testes de hipótese (Q4/Q5) — mantenha a exploração e plots nos notebooks.
 
-- No Git Bash / macOS / Linux:
-
-```bash
-python -m venv .venv
-source .venv/Scripts/activate
-```
-
-- No Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-3. Instale as dependências:
+**3) Como rodar (reprodução rápida)**
+1. Criar e ativar ambiente e instalar dependências:
 
 ```bash
+python -m venv venv
+source "venv/Scripts/activate"   # Git Bash / WSL (PowerShell: venv\Scripts\Activate.ps1)
 pip install -r requirements.txt
 ```
 
-4. Execute os scripts em ordem, começando obrigatoriamente pela Questão 6 (ETL), pois ela gera os arquivos limpos (_limpo.csv) necessários para as demais análises.
+2. Rodar todas as análises (gera arquivos em `outputs/`):
 
-**🧹 Passo 0: Data Quality & ETL (Resposta da Questão 6)**
+```bash
+source "venv/Scripts/activate"
+python scripts/analise.py --all
+```
 
-Antes de qualquer análise de negócios, foi construído um pipeline de Qualidade de Dados. A base original continha ruídos que comprometeriam o cálculo de faturamento e métricas de clientes.
+3. Testes complementares (hipóteses):
+- Q4 (hipóteses sobre Nov/2023): `python scripts/analise.py --q4-tests` (ou `--all` já executa os testes)
+- Q5 (análises de cancelamento por canal e efeito de cupom): `python scripts/analise.py --q5-tests`
 
-**Principais Tratamentos Realizados:**
+Saídas importantes de testes:
+- `outputs/q4_hypotheses.json`, `outputs/q4_coupon_penetration.csv`, `outputs/q4_segment_share.csv`, `outputs/q4_status_distribution_by_month.csv`
+- `outputs/q5_channel_tests.json`, `outputs/q5_channel_cancel_rates_full.csv`
+- `outputs/analysis_summary.json` (resumo compacto gerado pelo runner)
 
-- **Pedidos:** Remoção de 79 registros sem valor de faturamento (impossível inferir receita) e exclusão de linhas com datas corrompidas.
-- **Itens do Pedido:** Conversão de valores numéricos negativos (quantidades e preços) para absolutos (`abs()`), corrigindo erros de digitação. Imputação de `0.0` para descontos nulos.
-- **Tickets de Suporte:** Campos `date_resolucao` vazios foram mantidos, pois representam uma regra de negócio válida (tickets ainda em aberto). Status legados (resolvido, escalado) foram padronizados.
-- **Global:** Remoção de duplicatas exatas e aplicação de `strip()` e `snake_case` para padronização de chaves de cruzamento.
+**4) Resumo das respostas (Q1–Q6) — pesquisas e evidências**
 
-[📸 INSERIR PRINT DA TABELA "RELATÓRIO DE AUDITORIA E TRATAMENTOS" AQUI]
+- **Q1 — Volume de pedidos por status**
+  - Síntese: Entregue ≈ 9.901 (66%), Cancelado ≈ 2.526 (17%), Em Trânsito ≈ 1.365 (9%) — ver figura abaixo.
+  - Evidência: ![Pedidos por Status](img/Pedidos por Status.png)
 
-**📈 Análise de Negócios e Insights**
+- **Q2 — Top 10 produtos (por quantidade e receita)**
+  - Síntese: tabela com top10; exemplo: `Acessórios 43` entre os mais vendidos.
+  - Evidência: ![Top10 Produtos](img/Top10 Produtos.png)
 
-1. **Distribuição de Pedidos por Status**
+- **Q3 — Ticket médio por segmento (B2C vs B2B)**
+  - Síntese: B2B tem ticket médio muito maior que B2C (diferença estatisticamente significativa pelo Welch t‑test no notebook).
+  - Evidência: ![Ticket Médio](img/Ticket Medio.png)
 
-	A análise de status revela a saúde da operação logística da NovaShop.
+- **Q4 — Evolução mensal (sazonalidade e pico Nov/2023)**
+  - Síntese: pico claro em 2023-11 com 2.309 pedidos; série mensal está no README. Hipóteses foram formuladas e testadas (ver seção seguintes).
+  - Evidência: ![Volumes 2023-2024](img/Volumes de Pedidos 2023-2024.png)
 
-	[📸 INSERIR PRINT DA TABELA DE DISTRIBUIÇÃO E DO GRÁFICO DE PIZZA AQUI]
+- **Q5 — Canal com maior taxa de cancelamento**
+  - Síntese: `trafego_pago` apresenta a maior taxa de cancelamento (~30%) e ticket médio elevado. É o principal canal de risco identificado.
+  - Evidência: ![Rentabilidade vs Cancelamento](img/Rentabilidade vs Cancelamento.png)
 
-	**Conclusão:** Foi possível mapear com precisão o funil de entrega, identificando o percentual de sucesso ("Entregue") frente aos gargalos operacionais ("Cancelado" e "Devolvido").
+- **Q6 — Inconsistências / ETL**
+  - Síntese: pipeline de tratamento aplicado; principais tratamentos e resultados resumidos no notebook (tabela de tratamento).
+  - Evidência: ![Tratamento de Dados](img/Tratamento de Dados.png)
 
-2. **Top 10 Produtos Mais Vendidos**
+**5) Análises e hipóteses (o que foi testado / o que falta)**
 
-	Cruzamento da base de `itens_pedido` com o catálogo de `produtos` para identificar a curva A de vendas, ordenando pelo volume de saída e calculando a receita real gerada por item (`quantidade * preco_praticado`).
+- Trabalho feito (automatizado e reproduzível):
+  - Implementei testes reproduzíveis diretamente em `scripts/analise.py` para as hipóteses principais:
+    - `q4_hypotheses`: compara penetração de cupom entre Nov/2023 e Nov/2024, participação B2B/B2C, distribuição de status e busca por duplicações. Resultados em `outputs/q4_hypotheses.json`.
+    - `q5_tests`: compara taxas de cancelamento entre `trafego_pago` e outros canais (teste de duas proporções), e testa o efeito de cupom sobre taxa de cancelamento (geral e em Nov/2023). Resultados em `outputs/q5_channel_tests.json`.
 
-	[📸 INSERIR PRINT DA TABELA "TOP 10 PRODUTOS" AQUI]
+- Principais hipóteses (e suas verificações):
+  1. Hipótese: campanhas/promoções em Nov/2023 aumentaram penetração de cupom e, por consequência, cancelamentos.
+     - Teste: comparador de penetração de cupom (Nov/2023 vs Nov/2024) — `q4_hypotheses`.
+     - Resultado (resumido): penetração de cupom similar entre nov/23 e nov/24 nos dados analisados (hipótese refutada parcialmente).
+  2. Hipótese: Nov/2023 é explicado por concentração atípica de B2B.
+     - Teste: participação B2B/B2C por mês — `q4_hypotheses`.
+     - Resultado: participação B2B similar entre meses (hipótese não suportada).
+  3. Hipótese: ocorrência de problema operacional (ruptura) elevou taxa de cancelamento em Nov/2023.
+     - Teste: comparação de distribuição de status entre meses — `q4_hypotheses`.
+     - Resultado: taxa de cancelamento similar (hipótese não suportada).
+  4. Hipótese: pico é um artefato de duplicação de dados.
+     - Teste: checagem de duplicados em Nov/2023 — `q4_hypotheses`.
+     - Resultado: nenhuma duplicação detectada no conjunto atual (hipótese refutada).
 
-3. **Comportamento de Compra: B2C vs B2B**
+- Sobre `trafego_pago` (Q5): testes comparativos feitos em `q5_tests` indicam que a taxa de cancelamento de `trafego_pago` é estatisticamente maior que de outros canais (detalhes e p‑values em `outputs/q5_channel_tests.json`). Além disso, verifiquei o efeito de cupom sobre cancelamento (geral e para Nov/2023) — os resultados estão no JSON de saída.
 
-	Foi realizada uma análise para verificar se o tipo de cliente dita o poder de compra. Para garantir rigor analítico, além da média aplicou-se um Teste de Hipótese Estatística (Welch's T-Test) para comparar tickets médios entre segmentos.
+- O que NÃO foi testado / limitações:
+  - Análises mais granulares por campanha/UTM (não disponível nos dados fornecidos); isso é crítico para identificar anúncios específicos com baixa qualidade.
+  - Logs de pagamento (autorização/recusa) e dados de entregas (tracking) não estavam disponíveis — esses são inputs necessários para confirmar causas técnicas.
+  - Análise de fraude/perfil do usuário (assinatura comportamental) ficou fora do escopo pela falta de dados adicionais.
 
-	[📸 INSERIR PRINT DA TABELA "TICKET MÉDIO POR SEGMENTO" E DO "RESULTADO DO TESTE ESTATÍSTICO" AQUI]
+**6) Conclusões e recomendações**
 
-	**Conclusão Estratégica:** O p-valor indicou relevância estatística na diferença dos tickets médios entre B2B e B2C, justificando políticas segmentadas de precificação e marketing.
-
-4. **Sazonalidade e Validação de Hipóteses**
-
-	Ao plotar a evolução temporal de vendas entre 2023 e 2024, identificou-se um pico anormal em Novembro de 2023. Foram testadas 4 hipóteses:
-
-	- Black Friday/Descontos? Refutada.
-	- Contratos B2B Atípicos? Refutada.
-	- Ruptura de Estoque (Falsas Vendas)? Refutada.
-	- Erro de Engenharia de Dados? Confirmada. Diagnóstico: pico fruto de duplicação de IDs de pedidos.
-
-	[📸 INSERIR PRINT DO GRÁFICO DE LINHA "EVOLUÇÃO MENSAL" E DO CONSOLE COM O ALERTA DE DUPLICAÇÃO AQUI]
-
-5. **Eficiência por Canal de Aquisição (Rentabilidade vs. Risco)**
-
-	Cruzamento dos canais de entrada com faturamento e taxa de desistência. A análise mostra que alguns canais, apesar de gerar ticket médio competitivo, apresentam taxas de cancelamento elevadas, indicando tráfego desqualificado ou risco de fraude.
-
-	[📸 INSERIR PRINT DA TABELA "PERFORMANCE POR CANAL" E DO GRÁFICO DE BARRAS/LINHAS AQUI]
-
-Projeto desenvolvido como parte do processo seletivo da Peers Group
+- `trafego_pago` é o principal canal de risco: alto volume e alta taxa de cancelamento; priorizar investigação de campanhas/segmentação e validar qualidade do tráfego.
+- Recomendação operacional imediata: pausar / revisar campanhas pagas com ROI fraco; auditar fluxo de pagamento e checkout; adicionar validações para pedidos de alto valor vindos do canal pago.
+- Recomendação de dados: enriquecer `pedidos` com `utm_campaign`, `payment_status`, `payment_provider`, e logs de fulfillment/entrega para análises posteriores.
